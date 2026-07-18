@@ -1,0 +1,27 @@
+# This file configures the analyzer, which statically analyzes Dart code to
+# check for errors, warnings, and lints.
+#
+# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
+# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
+# invoked from the command line by running `flutter analyze`.
+
+# The following line activates a set of recommended lints for Flutter apps,
+# packages, and plugins designed to encourage good coding practices.
+## If you want to use the flutter_lints package, add it to pubspec.yaml
+## dependencies or dev_dependencies and restore the include line below:
+##
+## include: package:flutter_lints/flutter.yaml
+##
+## Many environments (CI, editors) fail to resolve package imports for
+## analysis_options unless the package is present. To avoid the
+## "include file not found" analyzer error, provide a minimal inline
+## linter configuration here instead of including the external file.
+
+linter:
+  # Minimal set of rules; adjust as needed for your project.
+  rules:
+    avoid_print: false
+    prefer_single_quotes: false
+
+# Additional information about this file can be found at
+# https://dart.dev/guides/language/analysis-options

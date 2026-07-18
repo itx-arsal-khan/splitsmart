@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "360513289352",
+    "project_id": "splitsmart-26733",
+    "storage_bucket": "splitsmart-26733.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:360513289352:android:b5b628bdd42440dc32733d",
+        "android_client_info": {
+          "package_name": "com.example.splitsmart_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAE0wiqV50A5EMV9ptWujf-jm8JVHczIpk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
