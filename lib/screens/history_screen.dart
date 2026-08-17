@@ -3,6 +3,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/backend_service.dart';
 import '../theme/app_colors.dart';
 import '../theme/app_styles.dart';
+import 'package:lottie/lottie.dart';
+import 'package:custom_refresh_indicator/custom_refresh_indicator.dart';
 import '../widgets/custom_card.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -129,58 +131,80 @@ class _HistoryScreenState extends State<HistoryScreen> {
               ),
             ),
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                child: Column(
-                  children: [
-                    TweenAnimationBuilder<double>(
-                      duration: const Duration(milliseconds: 500),
-                      tween: Tween(begin: 0.0, end: 1.0),
-                      curve: Curves.easeOutBack,
-                      builder: (context, val, child) {
-                        return Transform.scale(
-                          scale: val.clamp(0.0, 1.0),
-                          child: Opacity(
-                            opacity: val.clamp(0.0, 1.0),
-                            child: child,
-                          ),
-                        );
-                      },
-                      child: _bannerCard(),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    ...filteredDocs.asMap().entries.map((entry) {
-                      final data = entry.value.data();
-                      final isLast = entry.key == filteredDocs.length - 1;
-                      return TweenAnimationBuilder<double>(
-                        duration: Duration(milliseconds: 300 + (entry.key * 100)),
-                        tween: Tween(begin: 0.0, end: 1.0),
-                        curve: Curves.easeOutBack,
-                        builder: (context, val, child) {
-                          return Transform.translate(
-                            offset: Offset(50 * (1 - val), 0),
-                            child: Opacity(
-                              opacity: val.clamp(0.0, 1.0),
-                              child: child,
+              child: CustomRefreshIndicator(
+                onRefresh: () async {
+                  // Simulate refresh delay to show the Lottie animation
+                  await Future.delayed(const Duration(seconds: 2));
+                  setState(() {});
+                },
+                builder: (BuildContext context, Widget child, IndicatorController controller) {
+                  return Stack(
+                    alignment: Alignment.topCenter,
+                    children: [
+                      if (!controller.isIdle)
+                        Positioned(
+                          top: 20.0 + (30.0 * controller.value),
+                          child: SizedBox(
+                            height: 60,
+                            width: 60,
+                            child: Lottie.asset(
+                              'assets/animations/coin.json',
+                              fit: BoxFit.contain,
+                              animate: controller.isLoading || controller.isArmed,
                             ),
-                          );
-                        },
-                        child: _firebaseTimelineItem(data, isLast),
-                      );
-                    }),
-                    if (filteredDocs.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xl),
-                        child: Text(
-                          'No activities for $_selectedFilter.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         ),
+                      Transform.translate(
+                        offset: Offset(0, 100.0 * controller.value),
+                        child: child,
                       ),
-                    const SizedBox(height: AppSpacing.xl),
-                    if (filteredDocs.isNotEmpty) _bottomMessage(),
-                  ],
+                    ],
+                  );
+                },
+                child: ListView.builder(
+                  padding: const EdgeInsets.all(AppSpacing.lg),
+                  itemCount: 1 + filteredDocs.length + (filteredDocs.isEmpty ? 1 : 0) + (filteredDocs.isNotEmpty ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.xl),
+                        child: _bannerCard(),
+                      );
+                    }
+                    
+                    int itemIndex = index - 1;
+                    
+                    if (filteredDocs.isEmpty) {
+                      if (itemIndex == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.all(AppSpacing.xl),
+                          child: Text(
+                            'No activities for $_selectedFilter.',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        );
+                      }
+                      return const SizedBox.shrink();
+                    }
+                    
+                    if (itemIndex < filteredDocs.length) {
+                      final data = filteredDocs[itemIndex].data();
+                      final isLast = itemIndex == filteredDocs.length - 1;
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                        child: _firebaseTimelineItem(data, isLast),
+                      );
+                    } else if (itemIndex == filteredDocs.length) {
+                      return Padding(
+                        padding: const EdgeInsets.only(top: AppSpacing.xl),
+                        child: _bottomMessage(),
+                      );
+                    }
+                    
+                    return const SizedBox.shrink();
+                  },
                 ),
               ),
             ),

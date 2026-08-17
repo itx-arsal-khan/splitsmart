@@ -93,12 +93,13 @@ class _MakeGroupScreenState extends State<MakeGroupScreen> {
     Map<String, dynamic>? searchedUser;
     bool hasSearched = false;
     bool isSearching = false;
+    bool isAddingUnregistered = false;
     Timer? debounce;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
+        builder: (ctx, setDialogState) => AlertDialog(
           title: Row(
             children: [
               Icon(Icons.person_add, color: Theme.of(context).colorScheme.primary),
@@ -120,13 +121,13 @@ class _MakeGroupScreenState extends State<MakeGroupScreen> {
               children: [
                 CustomTextField(
                   controller: searchController,
-                  hintText: "Enter username or phone",
+                  hintText: "Enter username, phone, or name",
                   prefixIcon: Icons.search,
                   onChanged: (query) {
                     if (debounce?.isActive ?? false) debounce!.cancel();
                     
                     if (query.trim().isEmpty) {
-                      setState(() {
+                      setDialogState(() {
                         searchedUser = null;
                         hasSearched = false;
                         isSearching = false;
@@ -134,7 +135,7 @@ class _MakeGroupScreenState extends State<MakeGroupScreen> {
                       return;
                     }
 
-                    setState(() {
+                    setDialogState(() {
                       isSearching = true;
                       hasSearched = true;
                     });
@@ -142,7 +143,7 @@ class _MakeGroupScreenState extends State<MakeGroupScreen> {
                     debounce = Timer(const Duration(milliseconds: 500), () async {
                       final user = await BackendService.searchUserByPhoneOrUsername(query);
                       if (ctx.mounted) {
-                        setState(() {
+                        setDialogState(() {
                           searchedUser = user;
                           isSearching = false;
                         });
@@ -151,10 +152,36 @@ class _MakeGroupScreenState extends State<MakeGroupScreen> {
                   },
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                if (isSearching)
-                  const CircularProgressIndicator()
+                if (isSearching || isAddingUnregistered)
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  )
                 else if (hasSearched && searchedUser == null)
-                  const Text('No user found with that username or phone number.')
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('No registered user found.', style: TextStyle(color: Colors.red)),
+                      const SizedBox(height: AppSpacing.sm),
+                      const Text('You can still add them to keep a record.'),
+                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            _addFriend(
+                              context, 
+                              searchController.text.trim(), 
+                              () => setDialogState(() => isAddingUnregistered = true), 
+                              () => setDialogState(() => isAddingUnregistered = false),
+                            );
+                          },
+                          icon: const Icon(Icons.person_add_alt_1),
+                          label: Text('Add "${searchController.text.trim()}"'),
+                        ),
+                      ),
+                    ],
+                  )
                 else if (searchedUser != null)
                   Builder(
                     builder: (context) {
@@ -172,7 +199,7 @@ class _MakeGroupScreenState extends State<MakeGroupScreen> {
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(name),
-                            subtitle: Text('@$username'),
+                            subtitle: Text(username.isNotEmpty ? '@$username' : 'Unregistered User'),
                             trailing: isAlreadyAdded
                                 ? const Icon(Icons.check_circle, color: Colors.green)
                                 : ElevatedButton(

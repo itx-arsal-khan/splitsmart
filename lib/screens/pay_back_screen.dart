@@ -76,7 +76,7 @@ class _PayBackScreenState extends State<PayBackScreen> {
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'Pay Back',
+          widget.isPayingOut ? 'Pay Back' : 'Settle Up',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
       ),
@@ -151,7 +151,9 @@ class _PayBackScreenState extends State<PayBackScreen> {
               child: Column(
                 children: [
                   Text(
-                    'You owe ${widget.toUser}',
+                    widget.isPayingOut 
+                        ? 'You owe ${widget.toUser}' 
+                        : '${widget.toUser} owes you',
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
                       color: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
@@ -191,7 +193,7 @@ class _PayBackScreenState extends State<PayBackScreen> {
                         controller: _customAmountController,
                         hintText: 'Enter amount (max ${widget.amount.toStringAsFixed(0)})',
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        prefixIcon: Icons.currency_rupee,
+                        prefixText: 'Rs. ',
                       ),
                     ),
                   const SizedBox(height: AppSpacing.xxl),
@@ -384,7 +386,9 @@ class _PayBackScreenState extends State<PayBackScreen> {
             ),
             const SizedBox(height: AppSpacing.lg),
             Text(
-              'You owe ${widget.toUser}',
+              widget.isPayingOut 
+                  ? 'You owe ${widget.toUser}' 
+                  : '${widget.toUser} owes you',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),

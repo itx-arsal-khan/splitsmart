@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../services/backend_service.dart';
 import '../theme/app_colors.dart';
@@ -8,6 +10,7 @@ import '../utils/snackbar_util.dart';
 import '../widgets/custom_card.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/avatar_widget.dart';
+import 'package:share_plus/share_plus.dart';
 import 'add_bill_screen.dart';
 import 'pay_back_screen.dart';
 import 'settle_up_flow_screen.dart';
@@ -243,17 +246,56 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   ),
                   child: Icon(
-                    Icons.settings_outlined,
+                    Icons.share_outlined,
                     color: Theme.of(context).colorScheme.onSurface,
                     size: 18,
                   ),
                 ),
-                onPressed: () => _showSettingsBottomSheet(
-                  context,
-                  groupId: widget.groupId,
-                  currentName: groupName,
-                ),
+                onPressed: () async {
+                  final String shareText = "Join my SplitSmart group '$groupName'!\n\n"
+                      "1. Download the app here:https://drive.google.com/file/d/1bU4vQu7OBGOEdMQHVYswH3WSylFTi3p5/view?usp=sharing\n"
+                      "2. Open the app and sign in.\n"
+                      "3. Tap 'Join Group' on the Home screen and enter this code: ${widget.groupId}";
+                      
+                  if (kIsWeb) {
+                    await Clipboard.setData(ClipboardData(text: shareText));
+                    if (context.mounted) {
+                      SnackbarUtil.showSuccess(context, 'Link copied to clipboard! (Web Share not supported)');
+                    }
+                  } else {
+                    try {
+                      Share.share(shareText);
+                    } catch (e) {
+                      await Clipboard.setData(ClipboardData(text: shareText));
+                      if (context.mounted) {
+                        SnackbarUtil.showSuccess(context, 'Link copied to clipboard!');
+                      }
+                    }
+                  }
+                },
               ),
+              const SizedBox(width: AppSpacing.sm),
+              if (isCreator)
+                IconButton(
+                  icon: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    ),
+                    child: Icon(
+                      Icons.settings_outlined,
+                      color: Theme.of(context).colorScheme.onSurface,
+                      size: 18,
+                    ),
+                  ),
+                  onPressed: () => _showSettingsBottomSheet(
+                    context,
+                    groupId: widget.groupId,
+                    currentName: groupName,
+                  ),
+                ),
               const SizedBox(width: AppSpacing.sm),
             ],
           ),
@@ -428,12 +470,13 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
     Map<String, dynamic>? searchedUser;
     bool hasSearched = false;
     bool isSearching = false;
+    bool isAddingUnregistered = false;
     Timer? debounce;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
+        builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Add Member'),
           content: SizedBox(
             width: 300,
@@ -443,7 +486,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                 TextField(
                   controller: searchController,
                   decoration: const InputDecoration(
-                    hintText: 'Enter username or phone',
+                    hintText: 'Enter username, phone, or name',
                     border: OutlineInputBorder(),
                     prefixIcon: Icon(Icons.search),
                   ),
@@ -451,7 +494,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     if (debounce?.isActive ?? false) debounce!.cancel();
                     
                     if (query.trim().isEmpty) {
-                      setState(() {
+                      setDialogState(() {
                         searchedUser = null;
                         hasSearched = false;
                         isSearching = false;
@@ -459,7 +502,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                       return;
                     }
 
-                    setState(() {
+                    setDialogState(() {
                       isSearching = true;
                       hasSearched = true;
                     });
@@ -467,7 +510,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                     debounce = Timer(const Duration(milliseconds: 500), () async {
                       final user = await BackendService.searchUserByPhoneOrUsername(query);
                       if (ctx.mounted) {
-                        setState(() {
+                        setDialogState(() {
                           searchedUser = user;
                           isSearching = false;
                         });
@@ -476,10 +519,57 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                   },
                 ),
                 const SizedBox(height: 12),
-                if (isSearching)
-                  const CircularProgressIndicator()
+                if (isSearching || isAddingUnregistered)
+                  const Padding(
+                    padding: EdgeInsets.all(8.0),
+                    child: CircularProgressIndicator(),
+                  )
                 else if (hasSearched && searchedUser == null)
-                  const Text('No user found with that username or phone number.')
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('No registered user found.', style: TextStyle(color: Colors.red)),
+                      const SizedBox(height: AppSpacing.sm),
+                      const Text('You can still add them to keep a record.'),
+                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () async {
+                            final name = searchController.text.trim();
+                            if (name.isEmpty) return;
+
+                            FocusScope.of(ctx).unfocus();
+                            setDialogState(() => isAddingUnregistered = true);
+
+                            try {
+                              final uid = await BackendService.createUserWithName(name);
+                              if (uid.isEmpty) throw Exception('Failed to create user');
+                              
+                              await BackendService.addMemberToGroup(groupId, uid);
+                              
+                              if (ctx.mounted && Navigator.canPop(ctx)) {
+                                Navigator.pop(ctx);
+                              }
+                              if (context.mounted) {
+                                SnackbarUtil.showSuccess(context, '$name added to group');
+                              }
+                            } catch (e) {
+                              if (context.mounted) {
+                                SnackbarUtil.showError(context, 'Failed to add: ${e.toString()}');
+                              }
+                            } finally {
+                              if (ctx.mounted) {
+                                setDialogState(() => isAddingUnregistered = false);
+                              }
+                            }
+                          },
+                          icon: const Icon(Icons.person_add_alt_1),
+                          label: Text('Add "${searchController.text.trim()}"'),
+                        ),
+                      ),
+                    ],
+                  )
                 else if (searchedUser != null)
                   Builder(
                     builder: (context) {
@@ -497,7 +587,7 @@ class _GroupDetailScreenState extends State<GroupDetailScreen> {
                           ListTile(
                             contentPadding: EdgeInsets.zero,
                             title: Text(name),
-                            subtitle: Text('@$username'),
+                            subtitle: Text(username.isNotEmpty ? '@$username' : 'Unregistered User'),
                             trailing: isAlreadyAdded
                                 ? const Icon(Icons.check_circle, color: Colors.green)
                                 : ElevatedButton(

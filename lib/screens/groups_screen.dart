@@ -84,7 +84,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
           _buildTabHeader(),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
               child: _buildBody(context),
             ),
           ),
@@ -135,7 +135,7 @@ class _GroupsScreenState extends State<GroupsScreen> {
         ],
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: const EdgeInsets.all(AppSpacing.md),
         child: _buildBody(context),
       ),
       floatingActionButton: FloatingActionButton.extended(
@@ -229,19 +229,22 @@ class _GroupsScreenState extends State<GroupsScreen> {
     final iconName = data['iconName'] as String?;
     final isTrip = iconName == 'flight';
     final groupId = doc.id;
+    final createdBy = data['createdBy'] as String?;
+    final isCreator = createdBy == null || createdBy == BackendService.currentUser?.uid;
 
     return Container(
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         boxShadow: [
           BoxShadow(
-            color: accent.withOpacity(0.08),
-            blurRadius: 15,
-            offset: const Offset(0, 6),
+            color: accent.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
           )
         ],
       ),
       child: CustomCard(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         onTap: () => Navigator.push(
           context,
           MaterialPageRoute(
@@ -249,10 +252,11 @@ class _GroupsScreenState extends State<GroupsScreen> {
           ),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Container(
-              width: 60,
-              height: 60,
+              width: 48,
+              height: 48,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: accent.withOpacity(0.12),
@@ -264,120 +268,139 @@ class _GroupsScreenState extends State<GroupsScreen> {
               child: Icon(
                 isTrip ? Icons.flight_takeoff : Icons.home,
                 color: accent,
-                size: 26,
+                size: 22,
               ),
             ),
-            const SizedBox(width: AppSpacing.lg),
-          Expanded(
-            child: Hero(
-              tag: 'group-title-$groupId',
-              child: Material(
-                color: Colors.transparent,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      (data['name'] as String?) ?? 'Group',
-                      style: Theme.of(context).textTheme.titleLarge,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: AppSpacing.xs),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            (data['type'] as String?) ?? 'Group',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              fontWeight: FontWeight.w600,
-                              color: accent,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.sm),
-                        Flexible(
-                          child: Builder(
-                            builder: (context) {
-                              final totalMembers = (data['memberIds'] as List?)?.length ?? ((data['memberCount'] as int?) ?? 0);
-                              final friendsCount = (totalMembers > 0) ? totalMembers - 1 : 0;
-                              return Text(
-                                '$friendsCount friends',
-                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red),
-            onPressed: () => _showDeleteDialog(context, groupId),
-          ),
-          StreamBuilder<Map<String, dynamic>>(
-            stream: BackendService.groupBalanceStream(groupId, BackendService.currentUser!.uid),
-            builder: (context, balanceSnapshot) {
-              double netBalance = 0;
-              if (balanceSnapshot.hasData) {
-                final balancesMap = balanceSnapshot.data!['balances'] as Map<String, double>? ?? {};
-                for (final bal in balancesMap.values) {
-                  netBalance += bal;
-                }
-              }
-
-              final isOwed = netBalance > 0.01;
-              final isOwe = netBalance < -0.01;
-              final balanceColor = isOwed
-                  ? Theme.of(context).colorScheme.secondary
-                  : (isOwe ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.onSurfaceVariant);
-              
-              final balanceText = isOwed
-                  ? 'you are owed'
-                  : (isOwe ? 'you owe' : 'settled up');
-                  
-              final amountStr = isOwed || isOwe 
-                  ? 'Rs. ${netBalance.abs().toStringAsFixed(0)}'
-                  : 'Rs. 0';
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
-                    amountStr,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      color: balanceColor,
+                  Hero(
+                    tag: 'group-title-$groupId',
+                    child: Material(
+                      color: Colors.transparent,
+                      child: Text(
+                        (data['name'] as String?) ?? 'Group',
+                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
                   ),
-                  Text(
-                    balanceText,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
-                    ),
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          (data['type'] as String?) ?? 'Group',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.w600,
+                            color: accent,
+                            fontSize: 11,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Builder(
+                          builder: (context) {
+                            final totalMembers = (data['memberIds'] as List?)?.length ?? ((data['memberCount'] as int?) ?? 0);
+                            final friendsCount = (totalMembers > 0) ? totalMembers - 1 : 0;
+                            return Text(
+                              '$friendsCount friends',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ),
                 ],
-              );
-            },
-          ),
-        ],
+              ),
+            ),
+            if (isCreator) ...[
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () => _showDeleteDialog(context, groupId),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                iconSize: 20,
+              ),
+            ],
+            const SizedBox(width: 8),
+            StreamBuilder<Map<String, dynamic>>(
+              stream: BackendService.groupBalanceStream(groupId, BackendService.currentUser!.uid),
+              builder: (context, balanceSnapshot) {
+                double netBalance = 0;
+                if (balanceSnapshot.hasData) {
+                  final balancesMap = balanceSnapshot.data!['balances'] as Map<String, double>? ?? {};
+                  for (final bal in balancesMap.values) {
+                    netBalance += bal;
+                  }
+                }
+
+                final isOwed = netBalance > 0.01;
+                final isOwe = netBalance < -0.01;
+                final balanceColor = isOwed
+                    ? Theme.of(context).colorScheme.secondary
+                    : (isOwe ? Theme.of(context).colorScheme.error : Theme.of(context).colorScheme.onSurfaceVariant);
+                
+                final balanceText = isOwed
+                    ? 'you are owed'
+                    : (isOwe ? 'you owe' : 'settled up');
+                    
+                final amountStr = isOwed || isOwe 
+                    ? 'Rs. ${netBalance.abs().toStringAsFixed(0)}'
+                    : 'Rs. 0';
+
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      amountStr,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: balanceColor,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                    Text(
+                      balanceText,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
-    ),
-  );
+    );
 }
 
   void _showDeleteDialog(BuildContext context, String groupId) {

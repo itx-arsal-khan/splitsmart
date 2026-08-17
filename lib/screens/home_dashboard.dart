@@ -14,8 +14,13 @@ import 'settle_up_flow_screen.dart';
 import 'history_screen.dart';
 import 'profile_screen.dart';
 import 'make_group_screen.dart';
-import 'notifications_screen.dart';
-
+import 'package:shared_preferences/shared_preferences.dart';
+import 'instructions_screen.dart';
+import 'dart:async';
+import 'package:app_links/app_links.dart';
+import '../services/notification_service.dart';
+import '../utils/snackbar_util.dart';
+import 'group_detail_screen.dart';
 class HomeDashboard extends StatefulWidget {
   const HomeDashboard({super.key});
 
@@ -25,22 +30,211 @@ class HomeDashboard extends StatefulWidget {
 
 class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProviderStateMixin {
   int _currentIndex = 0;
+  late final PageController _pageController;
 
   late final AnimationController _pulseController;
+  
+  StreamSubscription? _notificationsSub;
+  StreamSubscription? _balanceSub;
+
+  late AppLinks _appLinks;
+  StreamSubscription<Uri>? _linkSubscription;
 
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _currentIndex);
     BackendService.cleanupCorruptedSettlements();
     BackendService.cleanupOrphanedData();
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 4),
     )..repeat(reverse: true);
+    
+    _checkFirstTimeUser();
+    _setupNotificationListeners();
+    _initDeepLinks();
+  }
+
+  Future<void> _initDeepLinks() async {
+    _appLinks = AppLinks();
+
+    try {
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri);
+      }
+    } catch (e) {
+      debugPrint("Failed to get initial deep link: $e");
+    }
+
+    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
+      _handleDeepLink(uri);
+    }, onError: (err) {
+      debugPrint("Deep link error: $err");
+    });
+  }
+
+  void _handleDeepLink(Uri uri) {
+    if (uri.scheme == 'splitsmart' && uri.host == 'join') {
+      final pathSegments = uri.pathSegments;
+      if (pathSegments.isNotEmpty) {
+        final groupId = pathSegments.first;
+        _joinGroup(groupId);
+      }
+    }
+  }
+
+  Future<void> _joinGroup(String groupId) async {
+    final user = BackendService.currentUser;
+    if (user == null) {
+      SnackbarUtil.showError(context, 'You must be logged in to join a group.');
+      return;
+    }
+    
+    try {
+      await BackendService.addMemberToGroup(groupId, user.uid);
+      if (mounted) {
+         SnackbarUtil.showSuccess(context, 'Successfully joined the group!');
+         Navigator.push(context, MaterialPageRoute(builder: (_) => GroupDetailScreen(groupId: groupId)));
+      }
+    } catch (e) {
+      if (mounted) {
+         SnackbarUtil.showError(context, 'Failed to join group: $e');
+      }
+    }
+  }
+
+  void _showJoinGroupDialog(BuildContext context) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Join Group'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(
+            labelText: 'Group Code',
+            hintText: 'Enter group code',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () {
+               final code = controller.text.trim();
+               if (code.isNotEmpty) {
+                 Navigator.pop(ctx);
+                 _joinGroup(code);
+               }
+            },
+            child: const Text('Join'),
+          )
+        ],
+      ),
+    );
+  }
+
+  Future<void> _checkFirstTimeUser() async {
+    final user = BackendService.currentUser;
+    if (user == null) return;
+
+    final creationTime = user.metadata.creationTime;
+    if (creationTime == null) return;
+
+    // Only show to users whose account was created very recently (e.g., within the last hour)
+    // This prevents old users logging into a new device from seeing it.
+    final isNewAccount = DateTime.now().difference(creationTime).inHours < 1;
+    if (!isNewAccount) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenToast = prefs.getBool('has_seen_instruction_toast') ?? false;
+    if (!hasSeenToast) {
+      await prefs.setBool('has_seen_instruction_toast', true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.help_outline, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                const Flexible(
+                  child: Text(
+                    'Tap ? for a quick guide',
+                    style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ],
+            ),
+            duration: const Duration(seconds: 6),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 30, left: 50, right: 50),
+            elevation: 8,
+            backgroundColor: Theme.of(context).colorScheme.primary,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+          ),
+        );
+      }
+    }
+  }
+
+  void _setupNotificationListeners() {
+    final user = BackendService.currentUser;
+    if (user == null || !BackendService.isFirebaseReady) return;
+
+    _notificationsSub = BackendService.notificationsStream(user.uid)?.listen((snapshot) {
+      for (var change in snapshot.docChanges) {
+        if (change.type == DocumentChangeType.added) {
+          final data = change.doc.data();
+          // We only want to show push notifications for recent items that are unread
+          if (data != null && data['read'] != true) {
+            final createdAt = data['createdAt'] as Timestamp?;
+            if (createdAt != null) {
+               // Only show local push notification if it was created in the last minute 
+               // (prevents showing all past unread notifications on load)
+               if (DateTime.now().difference(createdAt.toDate()).inMinutes < 2) {
+                 final type = data['type'] as String?;
+                 if (type == 'group_invite' || type == 'bill_added' || type == 'settlement') {
+                    NotificationService.showInstantNotification(
+                      id: change.doc.id.hashCode,
+                      title: type == 'group_invite' ? 'New Group Invite' : (type == 'settlement' ? 'Settlement' : 'New Bill Added'),
+                      body: data['message'] as String? ?? 'You have a new notification',
+                    );
+                 }
+               }
+            }
+          }
+        }
+      }
+    });
+
+    _balanceSub = BackendService.userBalanceStream(user.uid)?.listen((data) {
+      final totalUserOwes = (data['totalUserOwes'] as num?)?.toDouble() ?? 0;
+      if (totalUserOwes > 0) {
+        NotificationService.scheduleDailyReminder(
+          id: 100,
+          title: 'SplitSmart Reminder',
+          body: 'You have pending payments of Rs. ${totalUserOwes.toStringAsFixed(0)}. Settle up today!',
+          timeOfDay: const TimeOfDay(hour: 10, minute: 0),
+        );
+      } else {
+        NotificationService.cancelNotification(100);
+      }
+    });
   }
 
   @override
   void dispose() {
+    _linkSubscription?.cancel();
+    _notificationsSub?.cancel();
+    _balanceSub?.cancel();
+    _pageController.dispose();
     _pulseController.dispose();
     super.dispose();
   }
@@ -50,8 +244,12 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
-        child: IndexedStack(
-          index: _currentIndex,
+        child: PageView(
+          controller: _pageController,
+          onPageChanged: (index) {
+            setState(() => _currentIndex = index);
+          },
+          physics: const BouncingScrollPhysics(),
           children: [
             // Tab 0: Home dashboard
             Column(
@@ -204,43 +402,14 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
               ],
             ),
           ),
-          if (BackendService.currentUser != null)
-            StreamBuilder<QuerySnapshot<Map<String, dynamic>>>(
-              stream: BackendService.notificationsStream(BackendService.currentUser!.uid),
-              builder: (context, snapshot) {
-                int unreadCount = 0;
-                if (snapshot.hasData) {
-                  unreadCount = snapshot.data!.docs.where((doc) => doc.data()['read'] == false).length;
-                }
-                return Stack(
-                  children: [
-                    IconButton(
-                      icon: Icon(Icons.notifications_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const NotificationsScreen()),
-                      ),
-                    ),
-                    if (unreadCount > 0)
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          padding: const EdgeInsets.all(4),
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Text(
-                            '$unreadCount',
-                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      ),
-                  ],
-                );
-              },
+          IconButton(
+            icon: Icon(Icons.help_outline, color: Theme.of(context).colorScheme.onSurfaceVariant),
+            tooltip: 'How to use',
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const InstructionsScreen()),
             ),
+          ),
           IconButton(
             icon: Icon(Icons.settings_outlined, color: Theme.of(context).colorScheme.onSurfaceVariant),
             onPressed: () => Navigator.push(
@@ -429,7 +598,7 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
       children: [
         Expanded(
           child: CustomButton(
-            text: 'Add a Bill',
+            text: 'Add Bill',
             icon: Icons.add,
             type: ButtonType.primary,
             onPressed: () => Navigator.push(
@@ -438,7 +607,7 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
             ),
           ),
         ),
-        const SizedBox(width: AppSpacing.md),
+        const SizedBox(width: AppSpacing.sm),
         Expanded(
           child: CustomButton(
             text: 'Settle Up',
@@ -450,6 +619,15 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
                 builder: (_) => const SettleUpGroupsScreen(),
               ),
             ),
+          ),
+        ),
+        const SizedBox(width: AppSpacing.sm),
+        Expanded(
+          child: CustomButton(
+            text: 'Join',
+            icon: Icons.group_add,
+            type: ButtonType.secondary,
+            onPressed: () => _showJoinGroupDialog(context),
           ),
         ),
       ],
@@ -608,14 +786,10 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              Flexible(
-                child: Text(
-                  amount,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: color,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+              Text(
+                amount,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: color,
                 ),
               ),
             ],
@@ -802,7 +976,11 @@ class _HomeDashboardState extends State<HomeDashboard> with SingleTickerProvider
     return BottomNavigationBar(
       currentIndex: _currentIndex,
       onTap: (index) {
-        setState(() => _currentIndex = index);
+        _pageController.animateToPage(
+          index,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        );
       },
       items: const [
         BottomNavigationBarItem(

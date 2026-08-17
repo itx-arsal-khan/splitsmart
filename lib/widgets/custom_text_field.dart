@@ -13,6 +13,7 @@ class CustomTextField extends StatelessWidget {
   final int maxLines;
   final ValueChanged<String>? onChanged;
   final ValueChanged<String>? onSubmitted;
+  final String? prefixText;
 
   const CustomTextField({
     super.key,
@@ -27,6 +28,7 @@ class CustomTextField extends StatelessWidget {
     this.maxLines = 1,
     this.onChanged,
     this.onSubmitted,
+    this.prefixText,
   });
 
   @override
@@ -63,6 +65,11 @@ class CustomTextField extends StatelessWidget {
             prefixIcon: prefixIcon != null 
               ? Icon(prefixIcon, color: theme.colorScheme.onSurfaceVariant) 
               : null,
+            prefixText: prefixText,
+            prefixStyle: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w600,
+            ),
             suffixIcon: suffixIcon,
             filled: true,
             fillColor: theme.colorScheme.surface,

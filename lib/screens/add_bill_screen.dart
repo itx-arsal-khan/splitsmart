@@ -105,7 +105,9 @@ class _AddBillScreenState extends State<AddBillScreen> {
             return _buildLoadingView();
           }
 
-          final docs = snapshot.data?.docs ?? [];
+          final allDocs = snapshot.data?.docs ?? [];
+          final docs = allDocs.where((doc) => doc.data()['createdBy'] == user.uid).toList();
+          
           if (docs.isEmpty) {
             return _buildEmptyView(context);
           }
@@ -681,8 +683,16 @@ class _AddBillScreenState extends State<AddBillScreen> {
           Icon(Icons.group_off, size: 48, color: Theme.of(context).colorScheme.onSurfaceVariant),
           const SizedBox(height: AppSpacing.md),
           Text(
-            'No groups yet.',
+            'No groups available.',
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          Text(
+            'You must be a group creator to add bills.',
+            textAlign: TextAlign.center,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
           ),

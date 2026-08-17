@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'screens/home_dashboard.dart';
 import 'screens/welcome_screen.dart';
 import 'services/backend_service.dart';
+import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -17,6 +18,9 @@ Future<void> main() async {
     await FirebaseAuth.instance.setPersistence(Persistence.LOCAL);
   } catch (_) {}
 
+  await NotificationService.init();
+  await NotificationService.requestPermissions();
+  
   await AppTheme.init();
   runApp(const SplitSmartApp(home: AppEntry()));
 }

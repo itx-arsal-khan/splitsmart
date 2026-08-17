@@ -182,13 +182,15 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
               BackendService.displayNameForUser(user),
               style: Theme.of(context).textTheme.headlineSmall,
             ),
-            const SizedBox(height: AppSpacing.xs),
-            Text(
-              user?.email ?? 'Connected with Firebase',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+            if (user?.email != null && user!.email!.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(
+                user.email!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
-            ),
+            ],
             const SizedBox(height: AppSpacing.xxl),
             // Settings list
             CustomCard(
@@ -271,17 +273,6 @@ class _ProfileScreenState extends State<ProfileScreen> with SingleTickerProvider
                   color: Theme.of(context).colorScheme.error,
                   fontWeight: FontWeight.w600,
                 ),
-              ),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            Text(
-              BackendService.isFirebaseReady
-                  ? 'CONNECTED TO FIREBASE BACKEND'
-                  : 'LOCAL DEMO MODE',
-              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
-                letterSpacing: 1.2,
               ),
             ),
             const SizedBox(height: 32),

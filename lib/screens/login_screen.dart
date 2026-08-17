@@ -22,6 +22,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   bool _isLogin = true;
   bool _obscurePassword = true;
   bool _isLoading = false;
+  late final PageController _pageController;
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
@@ -38,6 +39,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
   @override
   void initState() {
     super.initState();
+    _pageController = PageController(initialPage: _isLogin ? 0 : 1);
     _floatingController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
@@ -46,6 +48,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   @override
   void dispose() {
+    _pageController.dispose();
     _floatingController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
@@ -198,6 +201,109 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
     });
   }
 
+  void _showForgotPasswordDialog(String initialEmail) {
+    final resetEmailController = TextEditingController(text: initialEmail);
+    bool isResetting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Theme.of(context).colorScheme.surface,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Text(
+                'Reset Password',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Enter your email to receive a password reset link.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  CustomTextField(
+                    controller: resetEmailController,
+                    hintText: 'hello@example.com',
+                    prefixIcon: Icons.email_outlined,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: isResetting ? null : () => Navigator.pop(context),
+                  child: Text(
+                    'Cancel',
+                    style: TextStyle(color: Theme.of(context).colorScheme.onSurfaceVariant),
+                  ),
+                ),
+                FilledButton(
+                  onPressed: isResetting
+                      ? null
+                      : () async {
+                          final email = resetEmailController.text.trim();
+                          if (email.isEmpty) {
+                            SnackbarUtil.showError(context, 'Please enter an email address.');
+                            return;
+                          }
+
+                          setDialogState(() {
+                            isResetting = true;
+                          });
+
+                          try {
+                            await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+                            if (!context.mounted) return;
+                            Navigator.pop(context);
+                            SnackbarUtil.showSuccess(context, 'Password reset link sent to $email');
+                          } on FirebaseAuthException catch (e) {
+                            if (!context.mounted) return;
+                            String message = 'Failed to send reset email.';
+                            if (e.code == 'user-not-found') {
+                              message = 'No user found for that email.';
+                            } else if (e.code == 'invalid-email') {
+                              message = 'The email address is invalid.';
+                            } else {
+                              message = e.message ?? message;
+                            }
+                            SnackbarUtil.showError(context, message);
+                          } catch (e) {
+                            if (!context.mounted) return;
+                            SnackbarUtil.showError(context, 'An error occurred. Please try again.');
+                          } finally {
+                            if (context.mounted) {
+                              setDialogState(() {
+                                isResetting = false;
+                              });
+                            }
+                          }
+                        },
+                  style: FilledButton.styleFrom(
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: isResetting
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Send Link'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildStatusIndicator(String status) {
     if (status.isEmpty) return const SizedBox.shrink();
     Color color = Colors.grey;
@@ -224,88 +330,104 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final bool isKeyboardVisible = MediaQuery.of(context).viewInsets.bottom > 0;
+
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 60),
-              
-              // Animated Floating Logo Text
-              AnimatedBuilder(
-                animation: _floatingController,
-                builder: (context, child) {
-                  final dy = math.sin(_floatingController.value * 2 * math.pi) * 8;
-                  return Transform.translate(
-                    offset: Offset(0, dy),
-                    child: child,
-                  );
-                },
-                child: TweenAnimationBuilder<double>(
-                  duration: const Duration(milliseconds: 800),
-                  tween: Tween(begin: 0.0, end: 1.0),
-                  curve: Curves.easeOutBack,
-                  builder: (context, value, child) {
-                    return Transform.scale(
-                      scale: value,
-                      child: Opacity(
-                        opacity: value.clamp(0.0, 1.0),
-                        child: child,
-                      ),
-                    );
-                  },
-                  child: Column(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(AppSpacing.md),
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                              blurRadius: 30,
-                              spreadRadius: 5,
-                            )
-                          ]
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.xl),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                AnimatedSize(
+                  duration: const Duration(milliseconds: 300),
+                  curve: Curves.fastOutSlowIn,
+                  child: isKeyboardVisible
+                      ? const SizedBox(width: double.infinity, height: 0)
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const SizedBox(height: 10),
+                            
+                            // Animated Floating Logo Text
+                            AnimatedBuilder(
+                              animation: _floatingController,
+                              builder: (context, child) {
+                                final dy = math.sin(_floatingController.value * 2 * math.pi) * 8;
+                                return Transform.translate(
+                                  offset: Offset(0, dy),
+                                  child: child,
+                                );
+                              },
+                              child: TweenAnimationBuilder<double>(
+                                duration: const Duration(milliseconds: 800),
+                                tween: Tween(begin: 0.0, end: 1.0),
+                                curve: Curves.easeOutBack,
+                                builder: (context, value, child) {
+                                  return Transform.scale(
+                                    scale: value,
+                                    child: Opacity(
+                                      opacity: value.clamp(0.0, 1.0),
+                                      child: child,
+                                    ),
+                                  );
+                                },
+                                child: Column(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(AppSpacing.md),
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                                            blurRadius: 30,
+                                            spreadRadius: 5,
+                                          )
+                                        ]
+                                      ),
+                                      child: Icon(
+                                        Icons.account_balance_wallet_rounded,
+                                        size: 48,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.md),
+                                    Text(
+                                      'SplitSmart',
+                                      style: Theme.of(context).textTheme.displaySmall?.copyWith(
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: -1,
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                    const SizedBox(height: AppSpacing.xs),
+                                    Text(
+                                      'Bills between friends, sorted.',
+                                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            
+                            const SizedBox(height: 48),
+                          ],
                         ),
-                        child: Icon(
-                          Icons.account_balance_wallet_rounded,
-                          size: 48,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.md),
-                      Text(
-                        'SplitSmart',
-                        style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -1,
-                          color: Theme.of(context).colorScheme.onSurface,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      Text(
-                        'Bills between friends, sorted.',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-              ),
               
-              const SizedBox(height: 48),
-              
-              TweenAnimationBuilder<double>(
-                duration: const Duration(milliseconds: 600),
-                tween: Tween(begin: 0.0, end: 1.0),
-                curve: Curves.easeOutCubic,
+              Expanded(
+                child: TweenAnimationBuilder<double>(
+                  duration: const Duration(milliseconds: 600),
+                  tween: Tween(begin: 0.0, end: 1.0),
+                  curve: Curves.easeOutCubic,
                 builder: (context, value, child) {
                   return Transform.translate(
                     offset: Offset(0, 30 * (1 - value)),
@@ -334,7 +456,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                       children: [
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() => _isLogin = true),
+                            onTap: () {
+                              _pageController.animateToPage(0, duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+                            },
                             behavior: HitTestBehavior.opaque,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
@@ -365,7 +489,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ),
                         Expanded(
                           child: GestureDetector(
-                            onTap: () => setState(() => _isLogin = false),
+                            onTap: () {
+                              _pageController.animateToPage(1, duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+                            },
                             behavior: HitTestBehavior.opaque,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 300),
@@ -396,160 +522,159 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                         ),
                       ],
                     ),
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 400),
-                      curve: Curves.fastOutSlowIn,
-                      child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.xl),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            if (!_isLogin) ...[
-                              Text(
-                                'Name',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              CustomTextField(
-                                controller: _nameController,
-                                hintText: 'Ali Hassan',
-                                prefixIcon: Icons.person_outline,
-                              ),
-                              const SizedBox(height: AppSpacing.lg),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Username',
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  _buildStatusIndicator(_usernameStatus),
-                                ],
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              CustomTextField(
-                                controller: _usernameController,
-                                hintText: 'alihassan_123',
-                                prefixIcon: Icons.alternate_email,
-                                onChanged: _onUsernameChanged,
-                              ),
-                              const SizedBox(height: AppSpacing.lg),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Phone Number',
-                                    style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                                  ),
-                                  _buildStatusIndicator(_phoneStatus),
-                                ],
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              CustomTextField(
-                                controller: _phoneController,
-                                hintText: '03001234567',
-                                prefixIcon: Icons.phone_outlined,
-                                keyboardType: TextInputType.phone,
-                                onChanged: _onPhoneChanged,
-                              ),
-                              const SizedBox(height: AppSpacing.lg),
-                            ],
-                            Text(
-                              'Email',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            CustomTextField(
-                              controller: _emailController,
-                              hintText: 'hello@example.com',
-                              prefixIcon: Icons.email_outlined,
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            const SizedBox(height: AppSpacing.lg),
-                            Text(
-                              'Password',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                            ),
-                            const SizedBox(height: AppSpacing.xs),
-                            CustomTextField(
-                              controller: _passwordController,
-                              hintText: '••••••••',
-                              obscureText: _obscurePassword,
-                              suffixIcon: IconButton(
-                                icon: Icon(_obscurePassword
-                                    ? Icons.visibility_outlined
-                                    : Icons.visibility_off_outlined),
-                                onPressed: () => setState(
-                                  () => _obscurePassword = !_obscurePassword,
+                    Expanded(
+                      child: PageView(
+                        controller: _pageController,
+                        physics: const BouncingScrollPhysics(),
+                        onPageChanged: (index) {
+                          setState(() => _isLogin = index == 0);
+                        },
+                        children: [
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(AppSpacing.xl),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Email', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _emailController,
+                                  hintText: 'hello@example.com',
+                                  prefixIcon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
                                 ),
-                              ),
-                            ),
-                            if (!_isLogin) ...[
-                              const SizedBox(height: AppSpacing.lg),
-                              Text(
-                                'Confirm Password',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: AppSpacing.xs),
-                              CustomTextField(
-                                controller: _confirmPasswordController,
-                                hintText: '••••••••',
-                                obscureText: _obscurePassword,
-                                prefixIcon: Icons.lock_outline,
-                              ),
-                            ],
-                            if (_isLogin) ...[
-                              const SizedBox(height: AppSpacing.sm),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: TextButton(
-                                  onPressed: BackendService.isFirebaseReady
-                                      ? () async {
-                                          final email = _emailController.text.trim();
-                                          if (email.isEmpty) {
-                                            SnackbarUtil.showError(context, 'Enter your email to reset your password.');
-                                            return;
-                                          }
-
-                                          await FirebaseAuth.instance.sendPasswordResetEmail(
-                                            email: email,
-                                          );
-
-                                          if (!mounted) {
-                                            return;
-                                          }
-
-                                          SnackbarUtil.showSuccess(context, 'Password reset email sent.');
-                                        }
-                                      : null,
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: Theme.of(context).colorScheme.primary,
-                                  ),
-                                  child: const Text(
-                                    'Forgot password?',
-                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                const SizedBox(height: AppSpacing.lg),
+                                Text('Password', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _passwordController,
+                                  hintText: '••••••••',
+                                  obscureText: _obscurePassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                                   ),
                                 ),
-                              ),
-                            ] else
-                              const SizedBox(height: AppSpacing.xl),
-                            SizedBox(
-                              width: double.infinity,
-                              height: 56, // Modern taller button
-                              child: CustomButton(
-                                text: _isLogin ? "Let's Go" : 'Create Account',
-                                type: ButtonType.primary,
-                                isLoading: _isLoading,
-                                onPressed: _submit,
-                              ),
+                                const SizedBox(height: AppSpacing.sm),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: BackendService.isFirebaseReady
+                                        ? () => _showForgotPasswordDialog(_emailController.text.trim())
+                                        : null,
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: Theme.of(context).colorScheme.primary,
+                                    ),
+                                    child: const Text('Forgot password?', style: TextStyle(fontWeight: FontWeight.w600)),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.xl),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: CustomButton(
+                                    text: "Let's Go",
+                                    type: ButtonType.primary,
+                                    isLoading: _isLoading && _isLogin,
+                                    onPressed: _submit,
+                                  ),
+                                ),
+                              ],
                             ),
-
-                          ],
-                        ),
+                          ),
+                          SingleChildScrollView(
+                            padding: const EdgeInsets.all(AppSpacing.xl),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('Name', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _nameController,
+                                  hintText: 'Ali Hassan',
+                                  prefixIcon: Icons.person_outline,
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Username', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                    _buildStatusIndicator(_usernameStatus),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _usernameController,
+                                  hintText: 'alihassan_123',
+                                  prefixIcon: Icons.alternate_email,
+                                  onChanged: _onUsernameChanged,
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text('Phone Number', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                    _buildStatusIndicator(_phoneStatus),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _phoneController,
+                                  hintText: '03001234567',
+                                  prefixIcon: Icons.phone_outlined,
+                                  keyboardType: TextInputType.phone,
+                                  onChanged: _onPhoneChanged,
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                Text('Email', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _emailController,
+                                  hintText: 'hello@example.com',
+                                  prefixIcon: Icons.email_outlined,
+                                  keyboardType: TextInputType.emailAddress,
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                Text('Password', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _passwordController,
+                                  hintText: '••••••••',
+                                  obscureText: _obscurePassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.lg),
+                                Text('Confirm Password', style: Theme.of(context).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600)),
+                                const SizedBox(height: AppSpacing.xs),
+                                CustomTextField(
+                                  controller: _confirmPasswordController,
+                                  hintText: '••••••••',
+                                  obscureText: _obscurePassword,
+                                  prefixIcon: Icons.lock_outline,
+                                ),
+                                const SizedBox(height: AppSpacing.xl),
+                                SizedBox(
+                                  width: double.infinity,
+                                  height: 56,
+                                  child: CustomButton(
+                                    text: 'Create Account',
+                                    type: ButtonType.primary,
+                                    isLoading: _isLoading && !_isLogin,
+                                    onPressed: _submit,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
+              ),
               ),
               ),
               const SizedBox(height: 32),
@@ -562,7 +687,9 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
                   children: [
                     WidgetSpan(
                       child: GestureDetector(
-                        onTap: () => setState(() => _isLogin = !_isLogin),
+                        onTap: () {
+                          _pageController.animateToPage(_isLogin ? 1 : 0, duration: const Duration(milliseconds: 400), curve: Curves.easeOutCubic);
+                        },
                         child: Text(
                           _isLogin ? 'Sign Up' : 'Log In',
                           style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -578,6 +705,7 @@ class _LoginScreenState extends State<LoginScreen> with SingleTickerProviderStat
             ],
           ),
         ),
+      ),
       ),
     );
   }
