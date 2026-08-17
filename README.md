@@ -17,11 +17,13 @@
 
 ## 📱 Screenshots
 
-*(Tip: Add your UI screenshots here by dragging and dropping them into GitHub!)*
-
 | Home Dashboard | Group Details | Add a Bill | Settle Up |
 | --- | --- | --- | --- |
-| ![Home](link-to-image) | ![Group](link-to-image) | ![Bill](link-to-image) | ![Settle](link-to-image) |
+| ![Home](<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/d991208a-410f-4268-8ab5-0d94afc45591" />
+) | ![Group](<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/e593334e-8046-4400-9c2d-46ef3e69de46" />
+) | ![Bill](<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/811b1f32-b028-4ae8-bfb8-6713cabd5a5a" />
+) | ![Settle](<img width="738" height="1600" alt="image" src="https://github.com/user-attachments/assets/4629b76c-75c3-4879-ae51-72c2c7361bdb" />
+) |
 
 ## 🛠️ Technology Stack
 
