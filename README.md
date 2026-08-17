@@ -64,7 +64,7 @@ To run this project locally, follow these steps:
 ## 👥 The Team
 
 This app was proudly built as a semester project by:
-- **Arsal Khan** - *Lead Developer*
+- **Arslan Ahmed Khan** - *Lead Developer*
 - **Abdul Haseeb** - *Developer / Contributor*
 - **Asim Nawaz** - *Developer / Contributor*
 
